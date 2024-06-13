@@ -1,0 +1,160 @@
+---
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+NOTES Define the gamma distribution
+
+mean: m standard deviation: sigma
+
+shape parameter: k = (m/sigma)\^2 scale parameter: theta = sigma\^2/m
+
+Discretise gamma
+
+first define severity level (based off monkeypox severity score system
+paper.) mild: 1-9 lesions Moderate: 10-99 lesions Severe: more than or
+equal 100 lesions
+
+find in the literature mean number of lesions
+
+Calculate probabilities for each severity state cumulative distribution
+function (CDF)
+
+CUTOFF
+
+example code and dummy numbers Step 1 obtaining probabilities of
+severity of disease
+
+```{r}
+#lesions
+m <- 50
+sigma <- 20
+
+#shape and scale parameter calculation
+k <- (m/sigma) ^2
+theta <- sigma^2 /m
+
+#thresholds for severity states
+threshold_mild <- 10
+threshold_moderate <- 100
+
+#probabilities for each severity state
+p_mild <- pgamma(threshold_mild, shape = k, scale = theta)
+p_moderate <- pgamma(threshold_moderate, shape = k, scale = theta) - p_mild
+p_severe <- 1 - pgamma(threshold_moderate, shape = k, scale = theta)
+
+#print the probabilities
+cat("Probability of mild severity (X < 10):", p_mild, "\n")
+cat("Probability of moderate severity (10 <= X < 100):", p_moderate, "\n")
+cat("Probability of severe severity (X >= 100):", p_severe, "\n")
+```
+
+Step 2 using multinomial distribution, sampling n of each disease state
+
+```{r}
+#define number of infected individuals
+M <- 1000
+
+#creating probability vector
+probabilities <-c(p_mild, p_moderate, p_severe)
+
+#drawing sample from multinomial distribution 
+#setting a seed
+set.seed(125)
+sample <- rmultinom(1, size= M, prob= probabilities)
+
+#extract counts for each severity state
+M_mild <- sample[1]
+M_moderate <- sample[2]
+M_severe <- sample[3]
+
+#printing counts
+
+
+cat("Number of individuals in mild state:", M_mild, "\n")
+cat("Number of individuals in moderate state:", M_moderate, "\n")
+cat("Number of individuals in severe state:", M_severe, "\n")
+```
+
+Step 3 simulate the duration of disease
+
+```{r}
+
+#Gamma distribution parameters for each severity state
+#example values. need to find from literature
+shape_mild <- 2
+scale_mild <- 5
+shape_moderate <- 3
+scale_moderate <- 7
+shape_severe <- 4
+scale_severe <- 9
+
+#Simulate the duration of disease for each individual in each state
+duration_mild <- rgamma(M_mild, shape = shape_mild, scale = scale_mild)
+
+duration_moderate <- rgamma(M_moderate, shape = shape_moderate, scale = scale_moderate)
+
+duration_severe <- rgamma(M_severe, shape = shape_severe, scale = scale_severe)
+
+#printing values
+cat("Summary of disease duration for mild state:\n")
+print(summary(duration_mild))
+
+cat("\nSummary of disease duration for moderate state:\n")
+print(summary(duration_moderate))
+
+cat("\nSummary of disease duration for severe state:\n")
+print(summary(duration_severe))
+```
+
+step 4
+simualte qol impact caused by symptoms for each disease state
+sampling from beta distributions
+```{r}
+
+#defining beta distribution parameters
+#numbers are random. needs literature
+a_mild <- 2
+b_mild <- 5
+a_moderate <- 3
+b_moderate <- 4
+a_severe <- 5
+b_severe <- 2
+
+#simulating
+qol_reduction_mild <- rbeta(M_mild, shape1 = a_mild, shape2 = b_mild)
+
+qol_reduction_moderate <- rbeta(M_moderate, shape1 = a_moderate, shape2 = b_moderate)
+
+qol_reduction_severe <- rbeta(M_severe, shape1 = a_severe, shape2 = b_severe)
+
+# Printing. this is a percentage
+cat("Summary of QoL reduction for mild state:\n")
+print(summary(qol_reduction_mild))
+
+cat("\nSummary of QoL reduction for moderate state:\n")
+print(summary(qol_reduction_moderate))
+
+cat("\nSummary of QoL reduction for severe state:\n")
+print(summary(qol_reduction_severe))
+
+
+```
+multiplying to find overall qol reduction due to mpox
+
+```{r}
+#overall QoL reduction for each individual in each severity state
+total_reduction_mild <- duration_mild * qol_reduction_mild
+total_reduction_moderate <- duration_moderate * qol_reduction_moderate
+total_reduction_severe <- duration_severe * qol_reduction_severe
+
+#Sum all the QoL reductions to get the overall reduction in QoL
+overall_qol_reduction <- sum(total_reduction_mild) + sum(total_reduction_moderate) + sum(total_reduction_severe)
+
+#print
+cat("Overall reduction in QoL due to mpox:", overall_qol_reduction, "\n")
+
+
+```
+
