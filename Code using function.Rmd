@@ -1,12 +1,14 @@
 ---
 title: "Untitled"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 date: "2024-06-17"
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r}
 
+library(ggplot2)
 
 source("Mpox_simulation_N_times.R")
 
@@ -14,8 +16,19 @@ source("Mpox_simulation_N_times.R")
 set.seed(12)
 results <- simulate_n_times(1000)
 
-# Convert results to a data frame
-results_df <- data.frame(overall_qol_reduction = results)
 
-summary(results_df)
+summary(results)
+
+# Plot the histogram of QoL reduction
+ggplot(results, aes(x = overall_qol_reduction)) +
+  geom_histogram(binwidth = 1, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Overall QoL Reduction Due to Mpox",
+       x = "Overall QoL Reduction",
+       y = "Frequency") +
+  theme_minimal()
+
+# Summary of deaths
+cat("Summary of total deaths over 1000 simulations:\n")
+print(summary(results$total_deaths))
+
 ```
