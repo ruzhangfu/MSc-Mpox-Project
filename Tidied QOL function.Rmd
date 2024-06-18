@@ -51,16 +51,11 @@ overall_qol_reduction <- sum(total_reduction_mild) + sum(total_reduction_moderat
   return(overall_qol_reduction)
 }
 
-
-
-
-#Simulating 1000 times
-set.seed(125)
-results <- replicate(1000, simulate_mpox_impact())
-
-#Print results
-cat("Summary of overall QoL reduction over 1000 simulations:\n")
-print(summary(results))
+#a function to simulate N times
+simulate_n_times <- function(N, ...) {
+  results <- replicate(N, simulate_mpox_impact(...))
+  return(results)
+}
 
 
 ```

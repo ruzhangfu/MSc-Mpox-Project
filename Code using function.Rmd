@@ -1,0 +1,21 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-06-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+source("Mpox_simulation_N_times.R")
+
+# Run the simulation 1000 times
+set.seed(12)
+results <- simulate_n_times(1000)
+
+# Convert results to a data frame
+results_df <- data.frame(overall_qol_reduction = results)
+
+summary(results_df)
+```
