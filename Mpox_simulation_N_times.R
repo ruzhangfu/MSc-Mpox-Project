@@ -9,10 +9,19 @@ simulate_mpox_impact <- function(m = 50, sigma = 20, threshold_mild = 10, thresh
                                  shape_mild = 2, scale_mild = 5, shape_moderate = 3, scale_moderate = 7,
                                  shape_severe = 4, scale_severe = 9, a_mild = 2, b_mild = 5, 
                                  a_moderate = 3, b_moderate = 4, a_severe = 5, b_severe = 2,
-                                 prob_death = 0.05, vacc_coverage = 0.7, ve_infection = 0.9,
+                                 cfr = 0.05, vacc_coverage = 0.7, ve_infection = 0.9,
                                  ve_death = 0.8, ve_symptoms = 0.7) {
   
-  #Determine the number of vaccinated and unvaccinated individuals
+ #dead individuals
+  dead <- M * cfr
+  alive <- M - dead
+  
+  never_infected <- 1 - alive * vacc_coverage
+  vaccinated_infected 
+  unvaccinated_infected
+  
+  
+   #Determine the number of vaccinated and unvaccinated individuals
   num_vaccinated <- round(M * vacc_coverage)
   num_unvaccinated <- M - num_vaccinated
   
