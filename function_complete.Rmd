@@ -69,8 +69,7 @@ return(list(
     lesions = lesions))
 }
 
-results <- simulate_mpox_impact(M, CFR, severity_params, duration_params, qol_params)
-print(results)
+
 ```
 
 
@@ -129,11 +128,6 @@ simulate_mpox_vaccination <- function(vacc_coverage, ve_I, ve_S, ve_D, M, CFR, s
   return(total_qol_loss)
 }
 
-
-
-# Calculate total QoL loss with vaccination
-total_qol_loss_with_vaccination <- simulate_mpox_vaccination(vacc_coverage, ve_I, ve_S, ve_D, M, CFR, severity_params, duration_params, qol_params)
-print(total_qol_loss_with_vaccination)
 
 
 ```
