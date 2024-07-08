@@ -106,14 +106,19 @@ simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d
   ))
 }
 
-# Example usage
-result <- simulate_mpox_impact(M, CFR, params, 
-                               vacc_coverage = 0.7, ve_i = 0.8, ve_s = 0.5, ve_d = 0.9)
+# Running the simulation 1000 times
 
-# Output results
-result
+results <- replicate(1000, simulate_mpox_impact(M, CFR, params, vacc_coverage = 0.7, ve_i = 0.8, ve_s = 0.5, ve_d = 0.9), simplify = FALSE)
 
+# Inspecting the results
 
+library(dplyr)
+results_df <- bind_rows(lapply(results, as.data.frame))
+results_df <- results_df %>% mutate(simulation = 1:n())
+results_df
+
+# Inspecting the results
+head(results_df)
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
