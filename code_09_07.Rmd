@@ -9,45 +9,46 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 
 ```{r}
 # Parameters
-M <- 1000
-CFR <- 0.01
+M <- 1000  # Population size
+CFR <- 0.01  # Case Fatality Rate
 
-# Severity, duration, qol parameters (mean, sd) (threshold)
+# Severity, duration, and quality of life parameters (mean, sd, thresholds)
 params <- list(
   severity_params = list(mu = 15, sd = 5, medium_threshold = 5, high_threshold = 15),
   duration_params = list(low_mu = 2, low_sd = 1, medium_mu = 6, medium_sd = 2, high_mu = 12, high_sd = 3),
   qol_params = list(low_mu = 2, low_sd = 0.5, medium_mu = 4, medium_sd = 1, high_mu = 6, high_sd = 1.5)
 )
 
-# Function to convert mu and sd to k (shape) and theta (scale)
+# Function to convert mean (mu) and standard deviation (sd) to shape (k) and scale (theta) for gamma distribution
 gamma_params <- function(mu, sd) {
   k <- (mu / sd) ^ 2
   theta <- (sd ^ 2) / mu
-  return(list(k = k, theta = theta))
+  list(k = k, theta = theta)
 }
 
-# Function to convert all mu and sd in a parameter list to k and theta
+# Function to convert all mu and sd parameters to gamma distribution parameters
 convert_params <- function(param_list) {
   converted_params <- lapply(names(param_list), function(param) {
     if (grepl("_mu$", param) || param == "mu") {
       base_name <- sub("_mu$", "", param)
       base_name <- ifelse(base_name == "mu", "", base_name)
       gamma_param <- gamma_params(param_list[[param]], param_list[[paste0(base_name, ifelse(base_name == "", "sd", "_sd"))]])
-      return(setNames(gamma_param, paste0(base_name, "_", names(gamma_param))))
+      setNames(gamma_param, paste0(base_name, "_", names(gamma_param)))
     } else if (!grepl("_sd$", param) && param != "sd") {
-      return(setNames(list(param_list[[param]]), param))
+      setNames(list(param_list[[param]]), param)
     }
   })
-  return(do.call(c, converted_params))
+  do.call(c, converted_params)
 }
 
-# Defining function to simulate population level QoL loss
+# Function to simulate population-level Quality of Life (QoL) loss
 simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d) {
   # Convert all parameter lists
   params <- lapply(params, convert_params)
-
+  
   # Function to calculate QoL loss for a given number of infections
   calculate_qol_loss <- function(infections, severity_params, duration_params, qol_params) {
+    # Generate severity based on gamma distribution
     lesions <- rgamma(infections, shape = severity_params$`_k`, scale = severity_params$`_theta`)
     severity <- cut(lesions, breaks = c(0, severity_params$medium_threshold, severity_params$high_threshold, Inf), labels = c("low", "medium", "high"))
     
@@ -58,72 +59,75 @@ simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d
       high = rgamma(sum(severity == "high"), shape = duration_params$high_k, scale = duration_params$high_theta)
     )
     
-    # Simulate quality of life loss for each severity category
+    # Simulate QoL loss for each severity category
     qol_loss <- list(
       low = rbeta(sum(severity == "low"), shape1 = qol_params$low_k, shape2 = qol_params$low_theta),
       medium = rbeta(sum(severity == "medium"), shape1 = qol_params$medium_k, shape2 = qol_params$medium_theta),
       high = rbeta(sum(severity == "high"), shape1 = qol_params$high_k, shape2 = qol_params$high_theta)
     )
     
-    # Calculate total quality of life loss
+    # Calculate total QoL loss
     total_qol_loss <- sum(qol_loss$low * duration$low) + sum(qol_loss$medium * duration$medium) + sum(qol_loss$high * duration$high)
     
-    return(total_qol_loss)
+    # Count the severity occurrences
+    severity_counts <- list(
+      low = sum(severity == "low"),
+      medium = sum(severity == "medium"),
+      high = sum(severity == "high")
+    )
+    
+    list(total_qol_loss = total_qol_loss, severity_counts = severity_counts)
   }
 
-  # Calculate QoL loss without vaccination
-  infections_without_vaccination <- M
-  deaths_without_vaccination <- rbinom(1, infections_without_vaccination, CFR)
-  survivors_without_vaccination <- infections_without_vaccination - deaths_without_vaccination
-  result_without_vaccination <- calculate_qol_loss(infections_without_vaccination, params$severity_params, params$duration_params, params$qol_params)
+  # QoL loss without vaccination
+  infections_no_vacc <- M
+  deaths_no_vacc <- rbinom(1, infections_no_vacc, CFR)
+  survivors_no_vacc <- infections_no_vacc - deaths_no_vacc
+  result_no_vacc <- calculate_qol_loss(infections_no_vacc, params$severity_params, params$duration_params, params$qol_params)
   
-  # Calculate QoL loss with vaccination
-  unvaccinated_population <- rbinom(1, M, 1 - vacc_coverage)
-  vaccinated_population <- rbinom(1, M, vacc_coverage)
+  # QoL loss with vaccination
+  unvaccinated_pop <- rbinom(1, M, 1 - vacc_coverage)
+  vaccinated_pop <- rbinom(1, M, vacc_coverage)
+  unvaccinated_infections <- unvaccinated_pop
+  vaccinated_infections <- rbinom(1, vaccinated_pop, 1 - ve_i)
+  infections_with_vacc <- unvaccinated_infections + vaccinated_infections
   
-  unvaccinated_infections <- unvaccinated_population
-  vaccinated_infections <- rbinom(1, vaccinated_population, 1 - ve_i)
-  
-  infections_with_vaccination <- unvaccinated_infections + vaccinated_infections
-  
-  # Calculate deaths separately for vaccinated and unvaccinated
-  deaths_unvaccinated <- rbinom(1, unvaccinated_infections, CFR)
-  deaths_vaccinated <- rbinom(1, vaccinated_infections, CFR * (1 - ve_d))
-  total_deaths_with_vaccination <- deaths_unvaccinated + deaths_vaccinated
-  
-  survivors_with_vaccination <- infections_with_vaccination - total_deaths_with_vaccination
-  
+  deaths_unvacc <- rbinom(1, unvaccinated_infections, CFR)
+  deaths_vacc <- rbinom(1, vaccinated_infections, CFR * (1 - ve_d))
+  total_deaths_with_vacc <- deaths_unvacc + deaths_vacc
+  survivors_with_vacc <- infections_with_vacc - total_deaths_with_vacc
+
   # Adjust severity parameters for vaccinated individuals
   adjusted_severity_params <- params$severity_params
   adjusted_severity_params$mu <- adjusted_severity_params$mu * (1 - ve_s)
   adjusted_severity_params <- convert_params(adjusted_severity_params)  # Convert adjusted params
 
-  result_with_vaccination <- calculate_qol_loss(infections_with_vaccination, adjusted_severity_params, params$duration_params, params$qol_params)
+  result_with_vacc <- calculate_qol_loss(infections_with_vacc, adjusted_severity_params, params$duration_params, params$qol_params)
   
-  return(list(
-        without_vaccination_qol_loss = result_without_vaccination,
-    with_vaccination_qol_loss = result_with_vaccination,
-    deaths_without_vaccination = deaths_without_vaccination,
-    survivors_without_vaccination = survivors_without_vaccination,
-    deaths_with_vaccination = total_deaths_with_vaccination,
-    survivors_with_vaccination = survivors_with_vaccination
-  ))
+  list(
+    without_vaccination_qol_loss = result_no_vacc$total_qol_loss,
+    with_vaccination_qol_loss = result_with_vacc$total_qol_loss,
+    deaths_without_vaccination = deaths_no_vacc,
+    survivors_without_vaccination = survivors_no_vacc,
+    deaths_with_vaccination = total_deaths_with_vacc,
+    survivors_with_vaccination = survivors_with_vacc,
+    severity_counts_without_vaccination = result_no_vacc$severity_counts,
+    severity_counts_with_vaccination = result_with_vacc$severity_counts
+  )
 }
 
 # Running the simulation 1000 times
-
 results <- replicate(1000, simulate_mpox_impact(M, CFR, params, vacc_coverage = 0.7, ve_i = 0.8, ve_s = 0.5, ve_d = 0.9), simplify = FALSE)
 
 # Inspecting the results
-
 library(dplyr)
 results_df <- bind_rows(lapply(results, as.data.frame))
 results_df <- results_df %>% mutate(simulation = 1:n())
-results_df
 
-# Inspecting the results
+# Displaying the results
 head(results_df)
 ```
+
 
 ```{r}
 # Edge Test Cases
@@ -153,3 +157,4 @@ edge_test_results_df
 # Inspecting the results
 print(edge_test_results_df)
 ```
+
