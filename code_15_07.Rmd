@@ -3,6 +3,10 @@ library(dplyr)
 # Parameters
 M <- 1000  # number of cases. will use data for number of cases per year in the DRC. 
 CFR <- 0.1  # Case Fatality Rate
+vacc_coverage = 0.7 
+ve_i = 0.8 
+ve_s = 0.5 
+ve_d = 0.9
 
 # Severity, duration, and quality of life parameters (mean, sd, thresholds)
 params <- list(
@@ -120,7 +124,7 @@ simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d
 
 # Define a function to run 10 iterations and sum the results
 simulate_10_iterations <- function() {
-  results <- replicate(10, simulate_mpox_impact(M, CFR, params, vacc_coverage = 0.7, ve_i = 0.8, ve_s = 0.5, ve_d = 0.9), simplify = FALSE)
+  results <- replicate(10, simulate_mpox_impact(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d), simplify = FALSE)
   
   # Extract severity counts separately
   severity_counts_without_vaccination <- lapply(results, `[[`, "severity_counts_without_vaccination")
@@ -155,8 +159,17 @@ simulate_10_iterations <- function() {
 }
 
 # Run the entire process 1000 times
-results_replication_1000_times <- replicate(1000, simulate_10_iterations(), simplify = FALSE) %>%
+
+#one dose 
+ve_i = 0.75
+results_replication_1000_times_one_dose <- replicate(1000, simulate_10_iterations(), simplify = FALSE) %>%
   bind_rows()
+
+#two dose
+ve_i = 0.85
+results_replication_1000_times_two_dose <- replicate(1000, simulate_10_iterations(), simplify = FALSE) %>%
+  bind_rows()
+
 
 ```
 
