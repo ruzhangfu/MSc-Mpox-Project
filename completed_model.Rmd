@@ -124,14 +124,22 @@ simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d
 
 # Define a function to run 10 iterations and sum the results
 simulate_10_iterations <- function() {
+  #use Lapply when fixed annual rate is included M * (1+i)^n
   results <- replicate(10, simulate_mpox_impact(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d), simplify = FALSE)
   
   # Extract severity counts separately
   severity_counts_without_vaccination <- lapply(results, `[[`, "severity_counts_without_vaccination")
   severity_counts_with_vaccination <- lapply(results, `[[`, "severity_counts_with_vaccination")
   
-  results_df <- bind_rows(lapply(results, function(x) x[!names(x) %in% c("severity_counts_without_vaccination", "severity_counts_with_vaccination")]))
+  results_df <- bind_rows(lapply(results, function(x) x[!names(x) %in% c("severity_counts_without_vaccination", "severity_counts_with_vaccination")]),.id = "year") %>% 
+    mutate(year = as.numeric(year),
+           life_years_lost_death_with_vaccination = deaths_with_vaccination * (10 - (year-0.5)),
+        life_years_lost_death_without_vaccination = deaths_without_vaccination * (10 - (year - 0.5)),
+        number_vaccinated = M * vacc_coverage #NOT M IF FIXED INCREASE RATE IS INCLUDED
+          ) 
   
+  
+
   #summarizing results
   summarized_results <- results_df %>%
     summarize(
@@ -142,7 +150,10 @@ simulate_10_iterations <- function() {
       deaths_without_vaccination = sum(deaths_without_vaccination),
       survivors_without_vaccination = sum(survivors_without_vaccination),
       deaths_with_vaccination = sum(deaths_with_vaccination),
-      survivors_with_vaccination = sum(survivors_with_vaccination)
+      survivors_with_vaccination = sum(survivors_with_vaccination),
+      life_years_lost_death_with_vaccination = sum(life_years_lost_death_with_vaccination),
+      life_years_lost_death_without_vaccination = sum(life_years_lost_death_without_vaccination),
+      number_vaccinated = sum(number_vaccinated)
     )
   
   #Summarize severity counts separately
@@ -161,14 +172,17 @@ simulate_10_iterations <- function() {
 # Run the entire process 1000 times
 
 #one dose 
+#can record quality of life loss per dose
 ve_i = 0.75
 results_replication_1000_times_one_dose <- replicate(1000, simulate_10_iterations(), simplify = FALSE) %>%
-  bind_rows()
+  bind_rows() %>%
+  mutate(doses_number = number_vaccinated)
 
 #two dose
 ve_i = 0.85
 results_replication_1000_times_two_dose <- replicate(1000, simulate_10_iterations(), simplify = FALSE) %>%
-  bind_rows()
+  bind_rows() %>%
+  mutate(doses_number = number_vaccinated * 2)
 
 
 ```
