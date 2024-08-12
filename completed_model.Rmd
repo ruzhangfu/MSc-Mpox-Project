@@ -1,5 +1,12 @@
 ```{r}
+#loading libraries
 library(dplyr)
+library(tidyr)
+library(summarytools)
+#plots
+library(ggplot2)
+library(patchwork)
+library(ghibli)
 
 #set seed
 set.seed(125)
@@ -8,16 +15,24 @@ set.seed(125)
 M <- 14626  # number of cases. will use data for number of cases per year in the DRC. 
 CFR <- 0.045  # Case Fatality Rate
 vacc_coverage = 0.7 
+ve_i_1 = 0.74
+ve_i_2 = 0.82
+
+ve_d_1 = 0.578
+ve_d_2 = 0.64
+
+ve_s_1 = 0.722
+ve_s_2 = 0.8 
 #ve_i = 0.8 
-ve_s = 0.5 #hazra et al
-ve_d = 0.64 #LW CFR paper 
+#ve_s = 0.58 #hazra et al
+#ve_d = 0.64 #LW CFR paper 
 
 # Severity, duration, and quality of life parameters (mean, sd, thresholds)
 # identify the units of these params
 params <- list(
   severity_params = list(mu = 20.51875, sd = 25.8612, medium_threshold = 10, high_threshold = 100),
-  duration_params = list(low_mu = 10.5, low_sd = 7, medium_mu = 21, medium_sd = 7, high_mu = 31.5, high_sd = 7),
-  qol_params = list(low_mu = 0.5, low_sd = 0.2, medium_mu = 0.6, medium_sd = 0.2, high_mu = 0.7, high_sd = 0.2)
+  duration_params = list(low_mu = 10.5/365, low_sd = 7/365, medium_mu = 21/365, medium_sd = 7/365, high_mu = 31.5/365, high_sd = 7/365),
+  qol_params = list(low_mu = 0.05, low_sd = 0.018, medium_mu = 0.35, medium_sd = 0.062, high_mu = 0.6, high_sd = 0.042)
 )
 
 #Revised gamma_mv function
@@ -47,7 +62,7 @@ gamma_mv <- function(n, mu, sd) {
     scale <- 1e-10  # Very small number to avoid errors
   }
   
-  return(rgamma(n, shape, scale))
+  return(rgamma(n, shape = shape, scale = scale))
 }
 
 beta_mv <- function(n, mu, sd){
@@ -136,7 +151,7 @@ simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d
 }
 
 # Define a function to run 10 iterations and sum the results
-simulate_10_iterations <- function() {
+simulate_10_iterations <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d) {
   #use Lapply when fixed annual rate is included M * (1+i)^n
   results <- replicate(10, simulate_mpox_impact(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d), simplify = FALSE)
   
@@ -182,26 +197,133 @@ simulate_10_iterations <- function() {
   return(c(summarized_results, summarized_severity_counts))
 }
 
+#function to mutate dataframe for one dose and two dose
 
-# Run the entire process 1000 times
 
 
-#one dose 
-#can record quality of life loss per dose
-ve_i = 0.736
-results_replication_1000_times_one_dose <- replicate(1000, simulate_10_iterations(), simplify = FALSE) %>%
-  bind_rows() %>%
-  mutate(doses_number = number_vaccinated)
+mutate_data <- function(data) {
+  data %>%
+    mutate(
+      #dose number for one dose
+      doses_number = number_vaccinated,
 
-#two dose
-ve_i = 0.818
-results_replication_1000_times_two_dose <- replicate(1000, simulate_10_iterations(), simplify = FALSE) %>%
-  bind_rows() %>%
-  mutate(doses_number = number_vaccinated * 2)
+      # Total QALY loss without vaccination (Morbidity + death)
+      total_QALY_loss_no_vaccination = without_vaccination_qol_loss + life_years_lost_death_without_vaccination,
+      
+      # Cases averted total and per dose
+      cases_averted = cases_without_vaccination - cases_with_vaccination,
+      cases_averted_per_dose = cases_averted / doses_number,
+      
+      # Deaths averted total and per dose
+      deaths_averted = deaths_without_vaccination - deaths_with_vaccination, 
+      deaths_averted_per_dose = deaths_averted / doses_number,
+      
+      # QALY gained total and per dose (morbidity)
+      qol_gained = without_vaccination_qol_loss - with_vaccination_qol_loss, 
+      qol_gained_per_dose = qol_gained / doses_number,
+      
+      # Total QALY gained total and per dose (morbidity and death)
+      total_QALY_gained = (life_years_lost_death_without_vaccination - life_years_lost_death_with_vaccination) + qol_gained,
+      total_QALY_gained_per_dose = total_QALY_gained / doses_number
+      
+    
+    )
+}
+
+mutate_data_two_dose <- function(data) {
+  data %>%
+    mutate(
+      #doses number for two dose
+      doses_number = number_vaccinated *2,
+
+      # Total QALY loss without vaccination (Morbidity + death)
+      total_QALY_loss_no_vaccination = without_vaccination_qol_loss + life_years_lost_death_without_vaccination,
+      
+      # Cases averted total and per dose
+      cases_averted = cases_without_vaccination - cases_with_vaccination,
+      cases_averted_per_dose = cases_averted / doses_number,
+      
+      # Deaths averted total and per dose
+      deaths_averted = deaths_without_vaccination - deaths_with_vaccination, 
+      deaths_averted_per_dose = deaths_averted / doses_number,
+      
+      # QALY gained total and per dose (morbidity)
+      qol_gained = without_vaccination_qol_loss - with_vaccination_qol_loss, 
+      qol_gained_per_dose = qol_gained / doses_number,
+      
+      # Total QALY gained total and per dose (morbidity and death)
+      total_QALY_gained = (life_years_lost_death_without_vaccination - life_years_lost_death_with_vaccination) + qol_gained,
+      total_QALY_gained_per_dose = total_QALY_gained / doses_number
+      
+    
+    )
+}
+
+calculate_confidence_interval <- function(data, confidence_level = 0.95) {
+  # Calculate the mean
+  mean_data <- mean(data)
+  
+  # Calculate the standard error
+  std_error <- sd(data) / sqrt(length(data))
+  
+  # Determine the critical value
+  alpha <- 1 - confidence_level
+  critical_value <- qt(1 - alpha / 2, df = length(data) - 1)
+  
+  # Calculate the margin of error
+  margin_of_error <- critical_value * std_error
+  
+  # Calculate the confidence interval
+  confidence_interval <- c(mean_data - margin_of_error, mean_data + margin_of_error)
+  
+  # Return the mean and confidence interval
+  list(
+    mean = mean_data,
+    confidence_interval = confidence_interval
+  )
+}
+
+#quantile(results_replication_1000_times_one_dose$without_vaccination_qol_loss,c(0.025,0.975))
+#mean(results_replication_1000_times_one_dose$without_vaccination_qol_loss)
+
+#quantile(results_replication_1000_times_two_dose$without_vaccination_qol_loss,c(0.025,0.975))
+#mean(results_replication_1000_times_two_dose$without_vaccination_qol_loss)
+
+
+#quantile(results_replication_1000_times_one_dose$cases_averted_per_dose,c(0.025,0.975))
+#mean(results_replication_1000_times_one_dose$without_vaccination_qol_loss)
+
 
 
 ```
 
+
+
+Run the entire process 1000 times
+
+```{r}
+#one dose 
+
+
+results_replication_1000_times_one_dose <- replicate(1000, simulate_10_iterations(M, CFR, params, vacc_coverage, ve_i = ve_i_1, ve_s = ve_s_1, ve_d = ve_d_1), simplify = FALSE) %>%
+  bind_rows()
+results_replication_1000_times_one_dose <- mutate_data(results_replication_1000_times_one_dose)
+
+#two dose
+
+
+results_replication_1000_times_two_dose <- replicate(1000, simulate_10_iterations(M, CFR, params, vacc_coverage, ve_i = ve_i_2, ve_s = ve_s_2, ve_d = ve_d_2), simplify = FALSE) %>%
+  bind_rows()
+results_replication_1000_times_two_dose <- mutate_data_two_dose(results_replication_1000_times_two_dose)
+```
+```{r}
+results_replication_1000_times_one_dose %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(value = sprintf("%.3f (%.3f - %.3f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  print(n=Inf)
+
+```
 
 ```{r}
 #Edge Test Cases
@@ -231,52 +353,11 @@ edge_test_results_df
 
 #Inspecting results
 print(edge_test_results_df)
-
 ```
 
-Descriptive statistics
-```{r}
-library(dplyr)
-library(tidyr)
-library(summarytools)
 
-
-
-```
-
-cases averted per dose
-```{r}
-results_replication_1000_times_one_dose <- results_replication_1000_times_one_dose %>%
-  mutate(cases_averted = cases_without_vaccination - cases_with_vaccination,
-  cases_averted_per_dose = cases_averted / doses_number)
-#mean(results_replication_1000_times_one_dose$cases_averted_per_dose)
-
-results_replication_1000_times_two_dose <- results_replication_1000_times_two_dose %>%
-  mutate(cases_averted = cases_without_vaccination - cases_with_vaccination,
-  cases_averted_per_dose = cases_averted / doses_number)
-```
-deaths averted per dose
-```{r}
-results_replication_1000_times_one_dose <- results_replication_1000_times_one_dose %>%
-  mutate(deaths_averted = deaths_without_vaccination - deaths_with_vaccination, 
-         deaths_averted_per_dose = deaths_averted / doses_number)
-
-results_replication_1000_times_two_dose <- results_replication_1000_times_two_dose %>%
-  mutate(deaths_averted = deaths_without_vaccination - deaths_with_vaccination, 
-         deaths_averted_per_dose = deaths_averted / doses_number)
-```
-qol loss averted per dose
-```{r}
-results_replication_1000_times_one_dose <- results_replication_1000_times_one_dose %>%
-  mutate(qol_gained = without_vaccination_qol_loss - with_vaccination_qol_loss, 
-         qol_gained_per_dose = qol_gained / doses_number)
-
-results_replication_1000_times_two_dose <- results_replication_1000_times_two_dose %>%
-  mutate(qol_gained = without_vaccination_qol_loss - with_vaccination_qol_loss, 
-         qol_gained_per_dose = qol_gained / doses_number)
-```
 lesions averted per dose
-```{r}
+
 mean_lesions <- params$severity_params$mu
 
 results_replication_1000_times_one_dose <- results_replication_1000_times_one_dose %>%
@@ -302,44 +383,59 @@ results_replication_1000_times_two_dose <- results_replication_1000_times_two_do
     lesions_averted = total_lesions_without_vaccination - total_lesions_with_vaccination,
     lesions_averted_per_dose = lesions_averted / doses_number
   )
-```
 
-```{r}
-#Function to display a Ghibli palette
-#display_palette <- function(palette_name) {
-  #palette_colors <- ghibli_palette(palette_name, n = 7, type = "discrete")
-  #n_colors <- length(palette_colors)
- # ggplot(data = data.frame(x = seq(1, n_colors)), aes(x = factor(x), fill = factor(x))) +
-    #geom_bar() +
-    #scale_fill_manual(values = palette_colors) +
-    #theme_minimal() +
-    #labs(title = paste("Palette:", palette_name), x = NULL, y = NULL) +
-    #theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank())
-#}
 
-# List of all Ghibli palettes
-#ghibli_palettes_list <- names(ghibli_palettes)
 
-# Plot all palettes
-#plots <- lapply(ghibli_palettes_list, display_palette)
-#do.call(gridExtra::grid.arrange, plots)
-```
+
 Results
-Density plots for total and by dose changes in cases averted, deaths averted, qol gained.
+first plot- projected burden of Mpox without vaccination
 ```{r}
-# Load necessary libraries
-library(ggplot2)
-library(patchwork)
-library(ghibli)
+# Function to adjust axis text for panels
+adjust_axis_text <- theme(axis.title.x = element_text(margin = margin(t = 10)), axis.title.y = element_text(margin = margin(r = 10)))
 
 # Define ghibli colors
 ghibli_colors <- ghibli_palette("KikiMedium", 7, type = "discrete")
 red_color <- ghibli_colors[3]
 blue_color <- ghibli_colors[4]
+new_color <- ghibli_colors[5]
 
-# Function to adjust axis text for top panels
-adjust_axis_text <- theme(axis.title.x = element_text(margin = margin(t = 10)), axis.title.y = element_text(margin = margin(r = 10)))
+#no_vacc_plot_A <- ggplot() +
+  #geom_density(data = results_replication_1000_times_one_dose, aes(x = cases_without_vaccination), color = new_color, alpha = 0.2, fill= new_color) +
+  #labs(x = "Cases", y = "") +
+  #theme_minimal() + adjust_axis_text 
 
+no_vacc_plot_B <- ggplot() +
+  geom_density(data = results_replication_1000_times_one_dose, aes(x = deaths_without_vaccination), color = new_color, alpha = 0.2, fill= new_color) +
+  labs(x = "Deaths", y = "") +
+  theme_minimal() + adjust_axis_text 
+
+no_vacc_plot_C <- ggplot() +
+  geom_density(data = results_replication_1000_times_one_dose, aes(x = without_vaccination_qol_loss), color = new_color, alpha = 0.2, fill= new_color) +
+  labs(x = "QALY Loss (Morbidity)", y = "") +
+  theme_minimal() + adjust_axis_text 
+
+no_vacc_plot_D <- ggplot() +
+  geom_density(data = results_replication_1000_times_one_dose, aes(x = total_QALY_loss_no_vaccination), color = new_color, alpha = 0.2, fill= new_color) +
+  labs(x = "QALY Loss Total (Morbidity + Deaths)", y = "") +
+  theme_minimal() + adjust_axis_text 
+
+
+# Stitching plots together using patchwork and collecting guides
+no_vaccination_plot <- (no_vacc_plot_B|no_vacc_plot_C | no_vacc_plot_D) +
+  plot_layout(guides = 'collect') +
+  plot_annotation(tag_levels = c('A', 'B', 'C'))
+
+# Save the combined plot to a file with a larger size
+ggsave("no_vaccination_plot.png", no_vaccination_plot, width = 12, height = 10, dpi = 1000)
+
+# Display the combined plot in RStudio Viewer
+print(no_vaccination_plot)
+```
+
+
+Density plots for total and by dose changes in cases averted, deaths averted, qol gained.
+Comparison between projected burden of Mpox between vaccination strategies
+```{r}
 # Create the individual plots with adjusted margins
 plot_A <- ggplot() +
   geom_density(data = results_replication_1000_times_one_dose, aes(x = cases_averted, fill = "One-dose"), color = blue_color, alpha = 0.2) +
@@ -359,32 +455,47 @@ plot_C <- ggplot() +
   geom_density(data = results_replication_1000_times_one_dose, aes(x = qol_gained, fill = "One-dose"), color = blue_color, alpha = 0.2) +
   geom_density(data = results_replication_1000_times_two_dose, aes(x = qol_gained, fill = "Two-dose"), color = red_color, alpha = 0.2) +
   scale_fill_manual(values = c("One-dose" = blue_color, "Two-dose" = red_color)) +
-  labs(x = "QoL gained", y = "", fill = "Dose Strategy") +
-  theme_minimal() + adjust_axis_text
+  labs(x = "QALY Gained (Morbidity)", y = "", fill = "Dose Strategy") +
+  theme_minimal() + adjust_axis_text 
 
 plot_D <- ggplot() +
+  geom_density(data = results_replication_1000_times_one_dose, aes(x = total_QALY_gained, fill = "One-dose"), color = blue_color, alpha = 0.2) +
+  geom_density(data = results_replication_1000_times_two_dose, aes(x = total_QALY_gained, fill = "Two-dose"), color = red_color, alpha = 0.2) +
+  scale_fill_manual(values = c("One-dose" = blue_color, "Two-dose" = red_color)) +
+  labs(x = "Total QALY gained", y = "", fill = "Dose Strategy") +
+  theme_minimal() + adjust_axis_text  + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+plot_E <- ggplot() +
   geom_density(data = results_replication_1000_times_one_dose, aes(x = cases_averted_per_dose, fill = "One-dose"), color = blue_color, alpha = 0.2) +
   geom_density(data = results_replication_1000_times_two_dose, aes(x = cases_averted_per_dose, fill = "Two-dose"), color = red_color, alpha = 0.2) +
   scale_fill_manual(values = c("One-dose" = blue_color, "Two-dose" = red_color)) +
   labs(x = "Cases Averted Per dose", y = "", fill = "Dose Strategy") +
-  theme_minimal() + adjust_axis_text
+  theme_minimal() + adjust_axis_text 
 
-plot_E <- ggplot() +
+plot_F <- ggplot() +
   geom_density(data = results_replication_1000_times_one_dose, aes(x = deaths_averted_per_dose, fill = "One-dose"), color = blue_color, alpha = 0.2) +
   geom_density(data = results_replication_1000_times_two_dose, aes(x = deaths_averted_per_dose, fill = "Two-dose"), color = red_color, alpha = 0.2) +
   scale_fill_manual(values = c("One-dose" = blue_color, "Two-dose" = red_color)) +
   labs(x = "Deaths Averted Per Dose", y = "", fill = "Dose Strategy") +
   theme_minimal() + adjust_axis_text
 
-plot_F <- ggplot() +
+plot_G <- ggplot() +
   geom_density(data = results_replication_1000_times_one_dose, aes(x = qol_gained_per_dose, fill = "One-dose"), color = blue_color, alpha = 0.2) +
   geom_density(data = results_replication_1000_times_two_dose, aes(x = qol_gained_per_dose, fill = "Two-dose"), color = red_color, alpha = 0.2) +
   scale_fill_manual(values = c("One-dose" = blue_color, "Two-dose" = red_color)) +
-  labs(x = "QoL gained Per Dose", y = "", fill = "Dose Strategy") +
-  theme_minimal() + adjust_axis_text
+  labs(x = "QALY gained Per Dose (Morbidity)", y = "", fill = "Dose Strategy") +
+  theme_minimal() + adjust_axis_text 
+
+
+plot_H <- ggplot() +
+  geom_density(data = results_replication_1000_times_one_dose, aes(x = total_QALY_gained_per_dose, fill = "One-dose"), color = blue_color, alpha = 0.2) +
+  geom_density(data = results_replication_1000_times_two_dose, aes(x = total_QALY_gained_per_dose, fill = "Two-dose"), color = red_color, alpha = 0.2) +
+  scale_fill_manual(values = c("One-dose" = blue_color, "Two-dose" = red_color)) +
+  labs(x = "Total QALY Gained Per Dose", y = "", fill = "Dose Strategy") +
+  theme_minimal() + adjust_axis_text 
 
 # Stitching plots together using patchwork and collecting guides
-combined_plot <- (plot_A | plot_B | plot_C) / (plot_D | plot_E | plot_F) +
+combined_plot <- (plot_A | plot_B | plot_C | plot_D) / (plot_E | plot_F | plot_G | plot_H) +
   plot_layout(guides = 'collect') +
   plot_annotation(tag_levels = c('A', 'B', 'C'))
 
@@ -394,92 +505,265 @@ ggsave("combined_plot.png", combined_plot, width = 12, height = 10, dpi = 1000)
 # Display the combined plot in RStudio Viewer
 print(combined_plot)
 ```
-
-
-linegraphs
+Linegraph
 ```{r}
+DRC_population = 105625114
+
+
+
+#ten million doses
+#one dose
+
+vacc_coverage=10000000/DRC_population
+one_dose_10_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
+  bind_rows()
+one_dose_10_million_doses <- mutate_data(one_dose_10_million_doses)
+
+#two dose
+
+vacc_coverage=10000000/DRC_population/2
+two_dose_10_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
+  bind_rows()
+two_dose_10_million_doses <- mutate_data_two_dose(two_dose_10_million_doses)
+
+#50 million doses
+#one dose
+
+vacc_coverage=50000000/DRC_population
+one_dose_50_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
+  bind_rows()
+one_dose_50_million_doses <- mutate_data(one_dose_50_million_doses)
+#two dose
+
+vacc_coverage=50000000/DRC_population/2
+two_dose_50_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
+  bind_rows()
+two_dose_50_million_doses <- mutate_data_two_dose(two_dose_50_million_doses)
+
+#100 million doses
+#one dose
+
+vacc_coverage=100000000/DRC_population
+one_dose_100_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
+  bind_rows()
+one_dose_100_million_doses <- mutate_data(one_dose_100_million_doses)
+#two dose
+
+vacc_coverage=100000000/DRC_population/2
+two_dose_100_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
+  bind_rows()
+two_dose_100_million_doses <- mutate_data_two_dose(two_dose_100_million_doses)
+```
+
+```{r}
+
+
+```
+
+```{r}
+
+#extracting means and 95% confidence intervals
+# List of datasets
+linegraph_datasets <- list(
+  one_dose_10_million_doses, 
+  two_dose_10_million_doses, 
+  one_dose_50_million_doses, 
+  two_dose_50_million_doses, 
+  one_dose_100_million_doses, 
+  two_dose_100_million_doses
+)
+
+# Names for the datasets
+dataset_names <- c(
+  "one_dose_10_million_doses", 
+  "two_dose_10_million_doses", 
+  "one_dose_50_million_doses", 
+  "two_dose_50_million_doses", 
+  "one_dose_100_million_doses", 
+  "two_dose_100_million_doses"
+)
+
+# Function to calculate mean and confidence interval
+calculate_mean_ci <- function(data, columns, dataset_name, confidence_level = 0.95) {
+  results <- data.frame(Dataset = character(),
+                        Column = character(),
+                        Mean = numeric(),
+                        Lower_CI = numeric(),
+                        Upper_CI = numeric(),
+                        stringsAsFactors = FALSE)
+  
+  z <- qnorm((1 + confidence_level) / 2)
+  
+  for (col in columns) {
+    sample_mean <- mean(data[[col]])
+    lower_ci <- quantile(data[[col]],(0.025))
+    upper_ci <- quantile(data[[col]],(0.975))
+    
+    results <- rbind(results, data.frame(Dataset = dataset_name,
+                                         Column = col,
+                                         Mean = sample_mean,
+                                         Lower_CI = lower_ci,
+                                         Upper_CI = upper_ci))
+  }
+  
+  return(results)
+}
+
+# Columns for which to calculate mean and CI
+columns_to_analyse <- c("cases_averted","deaths_averted","qol_gained", "total_QALY_gained")
+
+# Apply the function to each dataset and store results
+mean_ci_all_results <- do.call(rbind, lapply(seq_along(linegraph_datasets), function(i) {
+  calculate_mean_ci(linegraph_datasets[[i]], columns = columns_to_analyse, dataset_name = dataset_names[i])
+}))
+
+# Print the combined results
+print(mean_ci_all_results)
+
+```
+
+```{r}
+# Load required libraries
 library(ggplot2)
 library(dplyr)
-library(patchwork)
 
-# Adjust axis text theme
-adjust_axis_text <- theme(axis.title.x = element_text(margin = margin(t = 10)), 
-                          axis.title.y = element_text(margin = margin(r = 10)))
+#Converting all means and CI to dataframe
 
-# Add a 'dose_type' column to distinguish between one-dose and two-dose groups
-results_replication_1000_times_one_dose <- results_replication_1000_times_one_dose %>%
-  mutate(cases_averted_per_dose_cumulative = cumsum(cases_averted_per_dose), 
-         deaths_averted_per_dose_cumulative = cumsum(deaths_averted_per_dose),
-         qol_gained_per_dose_cumulative = cumsum(qol_gained_per_dose),
-         replication = 1:n(),
-         dose_type = "One Dose")
+#cases averted
+cases_averted_results <- mean_ci_all_results %>%
+  filter(Column == "cases_averted")
+cases_averted_results <- cases_averted_results %>%
+  mutate(Dose_Type = ifelse(grepl("one_dose", Dataset), "One Dose", "Two Dose"),
+         Dose_Number = as.numeric(gsub("[^0-9]", "", Dataset)))
+cases_averted_results <- cases_averted_results %>%
+  arrange(Dose_Number, Dose_Type)
 
-results_replication_1000_times_two_dose <- results_replication_1000_times_two_dose %>%
-  mutate(cases_averted_per_dose_cumulative = cumsum(cases_averted_per_dose), 
-         deaths_averted_per_dose_cumulative = cumsum(deaths_averted_per_dose),
-         qol_gained_per_dose_cumulative = cumsum(qol_gained_per_dose),
-         replication = 1:n(),
-         dose_type = "Two Doses")
 
-# Verify the unique values in dose_type column
-unique(results_replication_1000_times_one_dose$dose_type)
-unique(results_replication_1000_times_two_dose$dose_type)
 
-# Combine data
-combined_data <- bind_rows(results_replication_1000_times_one_dose, results_replication_1000_times_two_dose)
+#deaths averted
+deaths_averted_results <- mean_ci_all_results %>%
+  filter(Column == "deaths_averted")
+# Extract dose number from the dataset name and add it as a new column
+deaths_averted_results <- deaths_averted_results %>%
+  mutate(Dose_Type = ifelse(grepl("one_dose", Dataset), "One Dose", "Two Dose"),
+         Dose_Number = as.numeric(gsub("[^0-9]", "", Dataset)))
+# Ensure Dose_Number is sorted correctly
+deaths_averted_results <- deaths_averted_results %>%
+  arrange(Dose_Number, Dose_Type)
 
-# Line graph of cumulative cases averted against number of doses
-line_a <- ggplot(combined_data, aes(x = replication, y = cases_averted_per_dose_cumulative, color = dose_type)) +
-  geom_line() +
-  labs(title = "",
-       x = "Cumulative Number of doses",
-       y = "Cases Averted") +
-  scale_color_manual(values = c("One Dose" = blue_color, "Two Doses" = red_color), name = "Dose Strategy") +
+#qol gained
+qol_gained_results <- mean_ci_all_results %>%
+  filter(Column == "qol_gained")
+# Extract dose number from the dataset name and add it as a new column
+qol_gained_results <- qol_gained_results %>%
+  mutate(Dose_Type = ifelse(grepl("one_dose", Dataset), "One Dose", "Two Dose"),
+         Dose_Number = as.numeric(gsub("[^0-9]", "", Dataset)))
+# Ensure Dose_Number is sorted correctly
+qol_gained_results <- qol_gained_results %>%
+  arrange(Dose_Number, Dose_Type)
+
+
+
+#total qaly gained
+total_QALY_gained_results <- mean_ci_all_results %>%
+  filter(Column == "total_QALY_gained")
+# Extract dose number from the dataset name and add it as a new column
+total_QALY_gained_results <- total_QALY_gained_results %>%
+  mutate(Dose_Type = ifelse(grepl("one_dose", Dataset), "One Dose", "Two Dose"),
+         Dose_Number = as.numeric(gsub("[^0-9]", "", Dataset)))
+# Ensure Dose_Number is sorted correctly
+total_QALY_gained_results <- total_QALY_gained_results %>%
+  arrange(Dose_Number, Dose_Type)
+
+
+
+# Print the transformed data
+print(cases_averted_results)
+# Print the transformed data
+print(deaths_averted_results)
+# Print the transformed data
+print(qol_gained_results)
+# Print the transformed data
+print(total_QALY_gained_results)
+
+
+quantile(one_dose_10_million_doses$cases_averted,c(0.025,0.975))
+mean(one_dose_10_million_doses$without_vaccination_qol_loss)
+
+
+
+# Plot the data with geom_ribbon and remove ribbon legend
+cases_line <- ggplot(cases_averted_results, aes(x = Dose_Number, y = Mean, color = Dose_Type, group = Dose_Type)) +
+  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI, fill = Dose_Type), alpha = 0.2, color = NA, show.legend = FALSE) +  # Removing ribbon legend
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Mean Cases Averted by Dose Number",
+       x = "Dose Number (Millions)",
+       y = "",
+       color = "Dose Type") +
+  scale_color_manual(values = c("One Dose" = red_color, "Two Dose" = blue_color)) +
+  scale_fill_manual(values = c("One Dose" = red_color, "Two Dose" = blue_color)) +  # Ensure fill matches color
+  theme_minimal() +
   adjust_axis_text
 
-# Line graph of cumulative deaths averted against number of doses
-line_b <- ggplot(combined_data, aes(x = replication, y = deaths_averted_per_dose_cumulative, color = dose_type)) +
-  geom_line() +
-  labs(title = "",
-       x = "Cumulative Number of doses",
-       y = "Deaths Averted") +
-  scale_color_manual(values = c("One Dose" = blue_color, "Two Doses" = red_color), name = "Dose Strategy") +
+deathss_line <- ggplot(deaths_averted_results, aes(x = Dose_Number, y = Mean, color = Dose_Type, group = Dose_Type)) +
+  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI, fill = Dose_Type), alpha = 0.2, color = NA, show.legend = FALSE) +  # Removing ribbon legend
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Mean Deaths Averted by Dose Number",
+       x = "Dose Number (Millions)",
+       y = "",
+       color = "Dose Type") +
+  scale_color_manual(values = c("One Dose" = red_color, "Two Dose" = blue_color)) +
+  scale_fill_manual(values = c("One Dose" = red_color, "Two Dose" = blue_color)) +  # Ensure fill matches color
+  theme_minimal() +
   adjust_axis_text
 
-# Line graph of cumulative QoL gained against number of doses
-line_c <- ggplot(combined_data, aes(x = replication, y = qol_gained_per_dose_cumulative, color = dose_type)) +
-  geom_line() +
-  labs(title = "",
-       x = "Cumulative Number of doses",
-       y = "QoL Gained") +
-  scale_color_manual(values = c("One Dose" = blue_color, "Two Doses" = red_color), name = "Dose Strategy") +
+qol_line <- ggplot(qol_gained_results, aes(x = Dose_Number, y = Mean, color = Dose_Type, group = Dose_Type)) +
+  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI, fill = Dose_Type), alpha = 0.2, color = NA, show.legend = FALSE) +  # Removing ribbon legend
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "QALY (Morbidity) Averted by Dose Number",
+       x = "Dose Number (Millions)",
+       y = "",
+       color = "Dose Type") +
+  scale_color_manual(values = c("One Dose" = red_color, "Two Dose" = blue_color)) +
+  scale_fill_manual(values = c("One Dose" = red_color, "Two Dose" = blue_color)) +  # Ensure fill matches color
+  theme_minimal() +
   adjust_axis_text
 
-# Combine the line graphs into one plot and collect legends
-combined_linegraph <- (line_a | line_b | line_c) + 
-  plot_layout(guides = 'collect') + 
+total_QALY_line <- ggplot(total_QALY_gained_results, aes(x = Dose_Number, y = Mean, color = Dose_Type, group = Dose_Type)) +
+  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI, fill = Dose_Type), alpha = 0.2, color = NA, show.legend = FALSE) +  # Removing ribbon legend
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Total QALY Gain by Dose Number",
+       x = "Dose Number (Millions)",
+       y = "",
+       color = "Dose Type") +
+  scale_color_manual(values = c("One Dose" = red_color, "Two Dose" = blue_color)) +
+  scale_fill_manual(values = c("One Dose" = red_color, "Two Dose" = blue_color)) +  # Ensure fill matches color
+  theme_minimal() +
+  adjust_axis_text
+
+# Stitching plots together using patchwork and collecting guides
+combined_line_plot <- (cases_line | deathss_line) / (qol_line | total_QALY_line) +
+  plot_layout(guides = 'collect') +
   plot_annotation(tag_levels = c('A', 'B', 'C'))
 
-# Save the combined plot
-ggsave("combined_linegraph_with_legend.png", combined_linegraph, width = 12, height = 10, dpi = 1000)
+# Save the combined plot to a file with a larger size
+ggsave("combined_line_plot.png", combined_line_plot, width = 12, height = 10, dpi = 1000)
 
-# Print the combined plot
-print(combined_linegraph)
+# Display the combined plot in RStudio Viewer
+print(combined_line_plot)
+
 
 ```
 
 write csv
 ```{r}
-
 # Save the DataFrame to a CSV file
 write.csv(results_replication_1000_times_one_dose, "results_replication_1000_times_one_dose.csv")
 write.csv(results_replication_1000_times_two_dose, "results_replication_1000_times_two_dose.csv")
-
 ```
 
 sensitivity
-```{r}
-
-test <- lm(without_vaccination_qol_loss ~ ve_d, data=results_replication_1000_times_one_dose)
-
-```
