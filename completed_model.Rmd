@@ -1,3 +1,4 @@
+
 ```{r}
 #loading libraries
 library(dplyr)
@@ -510,6 +511,18 @@ Linegraph
 DRC_population = 105625114
 
 
+#zero doses
+#one dose
+vacc_coverage=0
+one_dose_0_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
+  bind_rows()
+one_dose_0_million_doses <- mutate_data(one_dose_0_million_doses)
+#two dose
+vacc_coverage=0
+two_dose_0_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
+  bind_rows()
+two_dose_0_million_doses <- mutate_data(two_dose_0_million_doses)
+
 
 #ten million doses
 #one dose
@@ -565,6 +578,8 @@ two_dose_100_million_doses <- mutate_data_two_dose(two_dose_100_million_doses)
 #extracting means and 95% confidence intervals
 # List of datasets
 linegraph_datasets <- list(
+  one_dose_0_million_doses,
+  two_dose_0_million_doses,
   one_dose_10_million_doses, 
   two_dose_10_million_doses, 
   one_dose_50_million_doses, 
@@ -575,6 +590,8 @@ linegraph_datasets <- list(
 
 # Names for the datasets
 dataset_names <- c(
+  "one_dose_0_million_doses",
+  "two_dose_0_million_doses",
   "one_dose_10_million_doses", 
   "two_dose_10_million_doses", 
   "one_dose_50_million_doses", 
