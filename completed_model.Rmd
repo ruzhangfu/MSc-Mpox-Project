@@ -105,7 +105,7 @@ calculate_qol_loss <- function(infections, severity_params, duration_params, qol
 
 # simulate_mpox_impact function
 simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d) {
-  
+
   #qol no vaccination
   infections_no_vacc <- M
   deaths_no_vacc <- rbinom(1, infections_no_vacc, CFR)
@@ -135,19 +135,31 @@ simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d
   }
   
   #calculate qol loss for vaccinated results
-  result_with_vacc <- calculate_qol_loss(infections_with_vacc, adjusted_severity_params, params$duration_params, params$qol_params)
+  result_in_vaccinated <- calculate_qol_loss(vaccinated_infections,
+                                             adjusted_severity_params,
+                                             params$duration_params,
+                                             params$qol_params)
+  result_in_unvaccinated <- calculate_qol_loss(unvaccinated_infections,
+                                               params$severity_params,
+                                               params$duration_params,
+                                               params$qol_params)
+  severity_counts_with_vaccination <- mapply(FUN = `+`,
+                                             result_in_vaccinated$severity_counts,
+                                             result_in_unvaccinated$severity_counts)
+  
+
   
   list(
     cases_with_vaccination = infections_with_vacc,
     cases_without_vaccination = infections_no_vacc,
     without_vaccination_qol_loss = result_no_vacc$total_qol_loss,
-    with_vaccination_qol_loss = result_with_vacc$total_qol_loss,
+    with_vaccination_qol_loss = result_in_vaccinated$total_qol_loss + result_in_unvaccinated$total_qol_loss,
     deaths_without_vaccination = deaths_no_vacc,
     survivors_without_vaccination = survivors_no_vacc,
     deaths_with_vaccination = total_deaths_with_vacc,
     survivors_with_vaccination = survivors_with_vacc,
     severity_counts_without_vaccination = result_no_vacc$severity_counts,
-    severity_counts_with_vaccination = result_with_vacc$severity_counts
+    severity_counts_with_vaccination = severity_counts_with_vaccination
   )
 }
 
@@ -304,19 +316,20 @@ Run the entire process 1000 times
 
 ```{r}
 #one dose 
+n_iter <- 1000
 
-
-results_replication_1000_times_one_dose <- replicate(1000, simulate_10_iterations(M, CFR, params, vacc_coverage, ve_i = ve_i_1, ve_s = ve_s_1, ve_d = ve_d_1), simplify = FALSE) %>%
+results_replication_1000_times_one_dose <- replicate(n_iter, simulate_10_iterations(M, CFR, params, vacc_coverage, ve_i = ve_i_1, ve_s = ve_s_1, ve_d = ve_d_1), simplify = FALSE) %>%
   bind_rows()
 results_replication_1000_times_one_dose <- mutate_data(results_replication_1000_times_one_dose)
 
 #two dose
 
 
-results_replication_1000_times_two_dose <- replicate(1000, simulate_10_iterations(M, CFR, params, vacc_coverage, ve_i = ve_i_2, ve_s = ve_s_2, ve_d = ve_d_2), simplify = FALSE) %>%
+results_replication_1000_times_two_dose <- replicate(n_iter, simulate_10_iterations(M, CFR, params, vacc_coverage, ve_i = ve_i_2, ve_s = ve_s_2, ve_d = ve_d_2), simplify = FALSE) %>%
   bind_rows()
 results_replication_1000_times_two_dose <- mutate_data_two_dose(results_replication_1000_times_two_dose)
 ```
+
 ```{r}
 results_replication_1000_times_one_dose %>%
   pivot_longer(everything()) %>%
@@ -514,12 +527,12 @@ DRC_population = 105625114
 #zero doses
 #one dose
 vacc_coverage=0
-one_dose_0_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
+one_dose_0_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
   bind_rows()
 one_dose_0_million_doses <- mutate_data(one_dose_0_million_doses)
 #two dose
 vacc_coverage=0
-two_dose_0_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
+two_dose_0_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
   bind_rows()
 two_dose_0_million_doses <- mutate_data(two_dose_0_million_doses)
 
@@ -528,14 +541,14 @@ two_dose_0_million_doses <- mutate_data(two_dose_0_million_doses)
 #one dose
 
 vacc_coverage=10000000/DRC_population
-one_dose_10_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
+one_dose_10_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
   bind_rows()
 one_dose_10_million_doses <- mutate_data(one_dose_10_million_doses)
 
 #two dose
 
 vacc_coverage=10000000/DRC_population/2
-two_dose_10_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
+two_dose_10_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
   bind_rows()
 two_dose_10_million_doses <- mutate_data_two_dose(two_dose_10_million_doses)
 
@@ -543,13 +556,13 @@ two_dose_10_million_doses <- mutate_data_two_dose(two_dose_10_million_doses)
 #one dose
 
 vacc_coverage=50000000/DRC_population
-one_dose_50_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
+one_dose_50_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
   bind_rows()
 one_dose_50_million_doses <- mutate_data(one_dose_50_million_doses)
 #two dose
 
 vacc_coverage=50000000/DRC_population/2
-two_dose_50_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
+two_dose_50_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
   bind_rows()
 two_dose_50_million_doses <- mutate_data_two_dose(two_dose_50_million_doses)
 
@@ -557,13 +570,13 @@ two_dose_50_million_doses <- mutate_data_two_dose(two_dose_50_million_doses)
 #one dose
 
 vacc_coverage=100000000/DRC_population
-one_dose_100_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
+one_dose_100_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
   bind_rows()
 one_dose_100_million_doses <- mutate_data(one_dose_100_million_doses)
 #two dose
 
 vacc_coverage=100000000/DRC_population/2
-two_dose_100_million_doses <- replicate(1000, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
+two_dose_100_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
   bind_rows()
 two_dose_100_million_doses <- mutate_data_two_dose(two_dose_100_million_doses)
 ```
