@@ -1,4 +1,3 @@
-
 ```{r}
 #loading libraries
 library(dplyr)
@@ -18,15 +17,10 @@ CFR <- 0.045  # Case Fatality Rate
 vacc_coverage = 0.7 
 ve_i_1 = 0.74
 ve_i_2 = 0.82
-
-ve_d_1 = 0.578
-ve_d_2 = 0.64
-
 ve_s_1 = 0.722
 ve_s_2 = 0.8 
-#ve_i = 0.8 
-#ve_s = 0.58 #hazra et al
-#ve_d = 0.64 #LW CFR paper 
+ve_d_1 = 0.578
+ve_d_2 = 0.64
 
 # Severity, duration, and quality of life parameters (mean, sd, thresholds)
 # identify the units of these params
@@ -72,7 +66,6 @@ beta_mv <- function(n, mu, sd){
   
   return(rbeta(n,alpha,beta))
 }
-
 
 # Revised calculate_qol_loss function
 calculate_qol_loss <- function(infections, severity_params, duration_params, qol_params) {
@@ -146,7 +139,6 @@ simulate_mpox_impact <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve_d
   severity_counts_with_vaccination <- mapply(FUN = `+`,
                                              result_in_vaccinated$severity_counts,
                                              result_in_unvaccinated$severity_counts)
-  
 
   
   list(
@@ -179,8 +171,6 @@ simulate_10_iterations <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve
         number_vaccinated = M * vacc_coverage #NOT M IF FIXED INCREASE RATE IS INCLUDED
           ) 
   
-  
-
   #summarizing results
   summarized_results <- results_df %>%
     summarize(
@@ -211,9 +201,6 @@ simulate_10_iterations <- function(M, CFR, params, vacc_coverage, ve_i, ve_s, ve
 }
 
 #function to mutate dataframe for one dose and two dose
-
-
-
 mutate_data <- function(data) {
   data %>%
     mutate(
@@ -295,25 +282,8 @@ calculate_confidence_interval <- function(data, confidence_level = 0.95) {
     confidence_interval = confidence_interval
   )
 }
-
-#quantile(results_replication_1000_times_one_dose$without_vaccination_qol_loss,c(0.025,0.975))
-#mean(results_replication_1000_times_one_dose$without_vaccination_qol_loss)
-
-#quantile(results_replication_1000_times_two_dose$without_vaccination_qol_loss,c(0.025,0.975))
-#mean(results_replication_1000_times_two_dose$without_vaccination_qol_loss)
-
-
-#quantile(results_replication_1000_times_one_dose$cases_averted_per_dose,c(0.025,0.975))
-#mean(results_replication_1000_times_one_dose$without_vaccination_qol_loss)
-
-
-
 ```
-
-
-
 Run the entire process 1000 times
-
 ```{r}
 #one dose 
 n_iter <- 1000
@@ -334,9 +304,14 @@ results_replication_1000_times_two_dose <- mutate_data_two_dose(results_replicat
 results_replication_1000_times_one_dose %>%
   pivot_longer(everything()) %>%
   group_by(name) %>%
-  summarise(value = sprintf("%.3f (%.3f - %.3f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  summarise(value = sprintf("%.5f (%.5f - %.5f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
   print(n=Inf)
 
+results_replication_1000_times_two_dose %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(value = sprintf("%.5f (%.5f - %.5f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  print(n=Inf)
 ```
 
 ```{r}
@@ -368,39 +343,6 @@ edge_test_results_df
 #Inspecting results
 print(edge_test_results_df)
 ```
-
-
-lesions averted per dose
-
-mean_lesions <- params$severity_params$mu
-
-results_replication_1000_times_one_dose <- results_replication_1000_times_one_dose %>%
-  mutate(
-    total_lesions_without_vaccination = severity_counts_without_vaccination_low * mean_lesions +
-                                        severity_counts_without_vaccination_medium * mean_lesions +
-                                        severity_counts_without_vaccination_high * mean_lesions,
-    total_lesions_with_vaccination = severity_counts_with_vaccination_low * mean_lesions +
-                                     severity_counts_with_vaccination_medium * mean_lesions +
-                                     severity_counts_with_vaccination_high * mean_lesions,
-    lesions_averted = total_lesions_without_vaccination - total_lesions_with_vaccination,
-    lesions_averted_per_dose = lesions_averted / doses_number
-  )
-
-results_replication_1000_times_two_dose <- results_replication_1000_times_two_dose %>%
-  mutate(
-    total_lesions_without_vaccination = severity_counts_without_vaccination_low * mean_lesions +
-                                        severity_counts_without_vaccination_medium * mean_lesions +
-                                        severity_counts_without_vaccination_high * mean_lesions,
-    total_lesions_with_vaccination = severity_counts_with_vaccination_low * mean_lesions +
-                                     severity_counts_with_vaccination_medium * mean_lesions +
-                                     severity_counts_with_vaccination_high * mean_lesions,
-    lesions_averted = total_lesions_without_vaccination - total_lesions_with_vaccination,
-    lesions_averted_per_dose = lesions_averted / doses_number
-  )
-
-
-
-
 Results
 first plot- projected burden of Mpox without vaccination
 ```{r}
@@ -433,7 +375,6 @@ no_vacc_plot_D <- ggplot() +
   labs(x = "QALY Loss Total (Morbidity + Deaths)", y = "") +
   theme_minimal() + adjust_axis_text 
 
-
 # Stitching plots together using patchwork and collecting guides
 no_vaccination_plot <- (no_vacc_plot_B|no_vacc_plot_C | no_vacc_plot_D) +
   plot_layout(guides = 'collect') +
@@ -445,8 +386,6 @@ ggsave("no_vaccination_plot.png", no_vaccination_plot, width = 12, height = 10, 
 # Display the combined plot in RStudio Viewer
 print(no_vaccination_plot)
 ```
-
-
 Density plots for total and by dose changes in cases averted, deaths averted, qol gained.
 Comparison between projected burden of Mpox between vaccination strategies
 ```{r}
@@ -498,8 +437,7 @@ plot_G <- ggplot() +
   geom_density(data = results_replication_1000_times_two_dose, aes(x = qol_gained_per_dose, fill = "Two-dose"), color = red_color, alpha = 0.2) +
   scale_fill_manual(values = c("One-dose" = blue_color, "Two-dose" = red_color)) +
   labs(x = "QALY gained Per Dose (Morbidity)", y = "", fill = "Dose Strategy") +
-  theme_minimal() + adjust_axis_text 
-
+  theme_minimal() + adjust_axis_text + theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 plot_H <- ggplot() +
   geom_density(data = results_replication_1000_times_one_dose, aes(x = total_QALY_gained_per_dose, fill = "One-dose"), color = blue_color, alpha = 0.2) +
@@ -523,30 +461,27 @@ Linegraph
 ```{r}
 DRC_population = 105625114
 
-
 #zero doses
 #one dose
 vacc_coverage=0
 one_dose_0_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
   bind_rows()
 one_dose_0_million_doses <- mutate_data(one_dose_0_million_doses)
+
 #two dose
 vacc_coverage=0
 two_dose_0_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
   bind_rows()
 two_dose_0_million_doses <- mutate_data(two_dose_0_million_doses)
 
-
 #ten million doses
 #one dose
-
 vacc_coverage=10000000/DRC_population
 one_dose_10_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
   bind_rows()
 one_dose_10_million_doses <- mutate_data(one_dose_10_million_doses)
 
 #two dose
-
 vacc_coverage=10000000/DRC_population/2
 two_dose_10_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
   bind_rows()
@@ -554,13 +489,12 @@ two_dose_10_million_doses <- mutate_data_two_dose(two_dose_10_million_doses)
 
 #50 million doses
 #one dose
-
 vacc_coverage=50000000/DRC_population
 one_dose_50_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
   bind_rows()
 one_dose_50_million_doses <- mutate_data(one_dose_50_million_doses)
-#two dose
 
+#two dose
 vacc_coverage=50000000/DRC_population/2
 two_dose_50_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
   bind_rows()
@@ -568,13 +502,12 @@ two_dose_50_million_doses <- mutate_data_two_dose(two_dose_50_million_doses)
 
 #100 million doses
 #one dose
-
 vacc_coverage=100000000/DRC_population
 one_dose_100_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_1, ve_s = ve_s_1, ve_d=ve_d_1), simplify = FALSE) %>%
   bind_rows()
 one_dose_100_million_doses <- mutate_data(one_dose_100_million_doses)
-#two dose
 
+#two dose
 vacc_coverage=100000000/DRC_population/2
 two_dose_100_million_doses <- replicate(n_iter, simulate_10_iterations(M = M, CFR = CFR, vacc_coverage = vacc_coverage, params = params, ve_i = ve_i_2, ve_s = ve_s_2, ve_d=ve_d_2), simplify = FALSE) %>%
   bind_rows()
@@ -582,12 +515,44 @@ two_dose_100_million_doses <- mutate_data_two_dose(two_dose_100_million_doses)
 ```
 
 ```{r}
+one_dose_10_million_doses %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(value = sprintf("%.4f (%.4f - %.4f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  print(n=Inf)
 
+two_dose_10_million_doses %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(value = sprintf("%.4f (%.4f - %.4f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  print(n=Inf)
 
+one_dose_50_million_doses %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(value = sprintf("%.4f (%.4f - %.4f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  print(n=Inf)
+
+two_dose_50_million_doses %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(value = sprintf("%.4f (%.4f - %.4f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  print(n=Inf)
+
+one_dose_100_million_doses %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(value = sprintf("%.4f (%.4f - %.4f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  print(n=Inf)
+
+two_dose_100_million_doses %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(value = sprintf("%.4f (%.4f - %.4f)",mean(value),quantile(value, 0.025),quantile(value, 0.975)))%>%
+  print(n=Inf)
 ```
 
 ```{r}
-
 #extracting means and 95% confidence intervals
 # List of datasets
 linegraph_datasets <- list(
@@ -653,12 +618,7 @@ print(mean_ci_all_results)
 ```
 
 ```{r}
-# Load required libraries
-library(ggplot2)
-library(dplyr)
-
 #Converting all means and CI to dataframe
-
 #cases averted
 cases_averted_results <- mean_ci_all_results %>%
   filter(Column == "cases_averted")
@@ -667,8 +627,6 @@ cases_averted_results <- cases_averted_results %>%
          Dose_Number = as.numeric(gsub("[^0-9]", "", Dataset)))
 cases_averted_results <- cases_averted_results %>%
   arrange(Dose_Number, Dose_Type)
-
-
 
 #deaths averted
 deaths_averted_results <- mean_ci_all_results %>%
@@ -785,15 +743,4 @@ ggsave("combined_line_plot.png", combined_line_plot, width = 12, height = 10, dp
 
 # Display the combined plot in RStudio Viewer
 print(combined_line_plot)
-
-
 ```
-
-write csv
-```{r}
-# Save the DataFrame to a CSV file
-write.csv(results_replication_1000_times_one_dose, "results_replication_1000_times_one_dose.csv")
-write.csv(results_replication_1000_times_two_dose, "results_replication_1000_times_two_dose.csv")
-```
-
-sensitivity
